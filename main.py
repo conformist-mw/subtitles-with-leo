@@ -3,6 +3,17 @@ import sys
 import json
 import requests
 from configparser import ConfigParser
+from jinja2 import Environment, FileSystemLoader
+
+
+def load_from_file(filename):
+    with open(filename, 'r') as f:
+        return json.load(f)
+
+
+def save_to_file(filename, data):
+    with open(filename, 'w') as f:
+        f.write(json.dumps(data, ensure_ascii=False))
 
 
 def get_credentials(config):
@@ -47,7 +58,7 @@ def extract_words(data):
     return dictionary
 
 
-def save_dictionary(session, dict_url):
+def download_dictionary(session, dict_url):
     params = {
         'sortBy': 'date',
         'wordType': 1,  # 0 if all (words, phrases, sentences)
@@ -63,8 +74,8 @@ def save_dictionary(session, dict_url):
         if r.ok:
             data = r.json()
             words = extract_words([i['words'] for i in data['userdict3']])
-            if len(words) == 0:
-                attempts += 1
+            if len(words) == 0:  # if page is empty the words are saved.
+                attempts += 1  # download three more pages for sure.
             dictionary.update(words)
             show_more = data['show_more']
             params['page'] += 1
@@ -73,10 +84,8 @@ def save_dictionary(session, dict_url):
     return dictionary
 
 
-def parse_subtitles(data):
-    with open('english.txt') as f:
-        stop_words = [word.strip() for word in f.readlines()]
-    words = re.findall(r'\b[a-zA-Z]{2,}\b', data)
+def parse_subtitles(text, stop_words):
+    words = re.findall(r'\b[a-zA-Z\']{2,}\b', text)
     words = set([w.lower() for w in words])
     return [w for w in words if w not in stop_words]
 
@@ -104,21 +113,28 @@ def get_translations(url, words):
     for word in words:
         r = s.get(url.format(word))
         if r.ok:
-            translate = r.json()['userdict3']
-            if len(translate['lemmas']) > 0:
-                lemma = translate['lemmas'][0]['lemma_value'].lower()
+            word_data = r.json()['userdict3']
+            if len(word_data['lemmas']) > 0:
+                lemma = word_data['lemmas'][0]['lemma_value'].lower()
             else:
                 lemma = word
             if word != lemma:
                 r = s.get(url.format(lemma))
-                translate = r.json()['userdict3']
-            is_user = translate['is_user']
-            no_trans = not bool(len(translate['translations']))
+                word_data = r.json()['userdict3']
+            is_user = word_data['is_user']
+            no_trans = not bool(len(word_data['translations']))
             has_error = bool(r.json()['error_msg'])
             word_in_saved_dict = lemma in saved_dict
             if not any([is_user, no_trans, has_error, word_in_saved_dict]):
-                translated.append(translate_word(lemma, translate))
+                translated.append(translate_word(lemma, word_data))
     return translated
+
+
+def generate_pages(translated_words):
+    env = Environment(loader=FileSystemLoader('./'))
+    template = env.get_template('templates/index.html')
+    with open('pages/index.html', 'w') as f:
+        f.write(template.render(data=translated_words))
 
 
 if __name__ == '__main__':
@@ -131,16 +147,17 @@ if __name__ == '__main__':
         sys.exit('Credentials are not right, exiting')
     if not config['CREDENTIALS'].getboolean('from_config'):
         save_credentials(config, email, password)
-    with open('dictionary.json') as f:
-        saved_dict = json.load(f)
-    dictionary = save_dictionary(s, urls['dict_url'])
+    saved_dict = load_from_file('dictionary.json')
+    dictionary = download_dictionary(s, urls['dict_url'])
     saved_dict.update(dictionary)
-    with open('dictionary.json', 'w') as f:
-        f.write(json.dumps(saved_dict, ensure_ascii=False))
-    with open(sys.argv[1]) as f:
-        data = f.read()
-    movie_words = parse_subtitles(data)
-    new_words = set([w for w in movie_words if w not in saved_dict])
-    translated_words = get_translations(urls['translate_url'], new_words)
-    with open('translated_words.json', 'w') as f:
-        f.write(json.dumps(translated_words, ensure_ascii=False, indent=4))
+    save_to_file('dictionary.json', saved_dict)
+    if len(sys.argv) > 1:
+        with open(sys.argv[1]) as f:
+            data = f.read()
+        with open('stopwords.txt') as f:
+            stop_words = [w.strip() for w in f.readlines()]
+        movie_words = parse_subtitles(data, stop_words)
+        new_words = set([w for w in movie_words if w not in saved_dict])
+        translated_words = get_translations(urls['translate_url'], new_words)
+        generate_pages(translated_words)
+        save_to_file('translated_words.json', translated_words)
