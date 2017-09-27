@@ -1,7 +1,9 @@
 # Subtitles with Lingualeo.com
 
 This project allows you to download whole dictionary from [lingualeo.com](https://lingualeo.com) and save the new words from choosen text file.
+
 TL;DR
+
 Result of script work can be found [here](https://conformist-mw.github.io/subtitles-with-leo/pages/)
 
 ### Installation
