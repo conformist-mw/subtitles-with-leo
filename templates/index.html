@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Leo words</title>
+		<meta charset="utf-8">
+		<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+		<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js">
+		</script>
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js">
+		</script>
+		<style type="text/css">
+			p.head {
+				font-size: 2em;
+				font-weight: bold;
+			}
+			p.head a {
+				color: #ccc;
+			}
+			.glyphicon {
+				top: 5px;
+			}
+			.remove {
+				position: absolute;
+				right: 20px;
+				top: 10px;
+				font-size: 24px;
+				color: black;
+				display: none;
+			}
+			.remove:hover {
+				color: red;
+			}
+			.inner:hover > .remove {
+				display: block;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="panel panel-default" style="background: #faf9f9">
+			<div class="container">
+				<div class="panel-body">
+					<a href="https://lingualeo.com">Lingualeo</a>
+					<a class="pull-right" href="https://github.com/conformist-mw/subtitles-with-leo">Subtitles with Leo</a>
+				</div>
+			</div>
+		</div>
+		<div class="container">
+			<div class="row">
+				{% for item in data %}
+				<div class="col-md-4">
+					<div  id="{{ item['word'] }}" class="col-md-12 inner text-center well">
+						<a data-word="{{ item['word'] }}" onclick="ignoreWord({{ item['word'] }}Ignore);" id="{{ item['word'] }}Ignore" class="remove" href="#/" title="ignore word"><i class="glyphicon glyphicon-remove"></i></a>
+						<p class="head"><a href="#/" onclick="playWord('{{ item['word'] }}Audio')"><i class="glyphicon glyphicon-volume-up"></i></a> {{ item['word'] }}</p>
+						<code>{{ item['transcription'] }}</code>
+						<audio id="{{ item['word'] }}Audio" src="{{ item['sound_url'] }}"></audio>
+						<hr>
+						{% for translate in item['translations'] %}
+						<p class="col-md-9">
+							<a id="{{ item['word'] }}{{ translate['translate_id'] }}" data-word="{{ item['word'] }}" data-word_id="{{ item['word_id'] }}" data-translate_value="{{ translate['translate_value'] }}" data-translate_id="{{ translate['translate_id'] }}" onclick="addWord({{ item['word'] }}{{ translate['translate_id'] }});" href="#/">{{ translate['translate_value'] }}</a>
+						</p>
+						<p class="col-md-3">{{ translate['translate_votes'] }}</p>
+						{% endfor %}
+					</div>
+				</div>
+				{% if loop.index is divisibleby(3) %}
+					<div class="col-md-12"></div>
+				{% endif %}
+				{% endfor %}
+			</div>
+		</div>
+		<div style="height: 60px;">
+		</div>
+		<nav class="navbar-default navbar-bottom">
+			<div class="container">
+				<div class="col-sm-12 text-center navbar-text">
+					conformist © <a href="https://github.com/conformist-mw">github</a>
+				</div>
+			</div>
+		</nav>
+	</body>
+	<script type="text/javascript">
+		function playWord(audioId){
+			var word = document.getElementById(audioId);
+			word.play();
+		}
+		function addWord(id){
+			var translate_value = $(id).data('translate_value');
+			var translate_id = $(id).data('translate_id');
+			var word_id = $(id).data('word_id');
+			var word = $(id).data('word');
+			data = {
+				'word_id': word_id,
+				'speech_part_id': 0,
+				'groupId': 'dictionary',
+				'translate_id': translate_id,
+				'translate_value': translate_value,
+				'user_word_value': word
+			};
+			$.post('http://localhost:5000/addWord', data)
+				.done(function(){
+					var str = '<p class="head">' + word + '</p><p>' + translate_value + '</p>';
+					$('#' + word).html(str);
+				});
+		}
+		function ignoreWord(word_id){
+			var word = $(word_id).data('word');
+			console.log(word);
+			$.post('http://localhost:5000/ignoreWord', {'word': word})
+				.done(function(){
+					var str = '<p class="head">' + word + '</p><br><p>Ignored</p>';
+					$('#' + word).html(str);
+				});
+		}
+	</script>
+</html>
