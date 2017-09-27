@@ -77,29 +77,31 @@ def parse_subtitles(data):
     with open('english.txt') as f:
         stop_words = [word.strip() for word in f.readlines()]
     words = re.findall(r'\b[a-zA-Z]{2,}\b', data)
-    words = [w.lower() for w in words]
+    words = set([w.lower() for w in words])
     return [w for w in words if w not in stop_words]
 
 
-def translate_word(data):
-    word = {}
-    word['transcription'] = data['transcription']
-    word['sound_url'] = data['sound_url']
-    word['translations'] = []
+def translate_word(word, data):
+    translations = []
     for translate in data['translations']:
         t = {
             'translate_id': translate['translate_id'],
             'translate_value': translate['translate_value'],
             'translate_votes': translate['translate_votes']
         }
-        word['translations'].append(t)
-    return word
+        translations.append(t)
+    return {
+        'word': word,
+        'word_id': data['word_id'],
+        'transcription': data['transcription'],
+        'sound_url': data['sound_url'],
+        'translations': translations
+    }
 
 
 def get_translations(url, words):
-    translated = {}
+    translated = []
     for word in words:
-        print(word)
         r = s.get(url.format(word))
         if r.ok:
             translate = r.json()['userdict3']
@@ -110,8 +112,12 @@ def get_translations(url, words):
             if word != lemma:
                 r = s.get(url.format(lemma))
                 translate = r.json()['userdict3']
-            if not translate['is_user'] and not r.json()['error_msg']:
-                translated[lemma] = translate_word(translate)
+            is_user = translate['is_user']
+            no_trans = not bool(len(translate['translations']))
+            has_error = bool(r.json()['error_msg'])
+            word_in_saved_dict = lemma in saved_dict
+            if not any([is_user, no_trans, has_error, word_in_saved_dict]):
+                translated.append(translate_word(lemma, translate))
     return translated
 
 
