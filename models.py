@@ -40,7 +40,8 @@ class TranslatedWord(db.Model):
     transcription = db.Column(db.String(120))
     sound_url = db.Column(db.String(80))
     translates = db.relationship(
-        'TranslatedOption', backref='translated_word', cascade='delete')
+        'TranslatedOption', backref='translated_word',
+        cascade='save-update, merge, delete')
 
     def __str__(self):
         return self.value
