@@ -7,7 +7,6 @@ from datetime import datetime
 from sqlalchemy import create_engine
 from configparser import ConfigParser
 from sqlalchemy.orm import sessionmaker
-from jinja2 import Environment, FileSystemLoader
 
 
 def get_sql_session(db_uri):
@@ -99,7 +98,7 @@ def download_dictionary(session, dict_url):
 
 
 def parse_subtitles(text):
-    words = re.findall(r'\b[a-zA-Z]{2,}\b', text)
+    words = re.findall(r'\b[a-zA-Z\']{2,}\b', text)
     words = set([w.lower() for w in words])
     return list(words)
 
@@ -147,13 +146,6 @@ def get_translations(url, words):
             if not any([is_user, no_trans,
                         word_in_dict, word_in_stop_words]):
                 add_translated_word(lemma, word_data)
-
-
-def generate_pages(translated_words):
-    env = Environment(loader=FileSystemLoader('./'))
-    template = env.get_template('templates/index.html')
-    with open('pages/index.html', 'w') as f:
-        f.write(template.render(data=translated_words))
 
 
 if __name__ == '__main__':
