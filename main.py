@@ -108,20 +108,22 @@ def add_translated_word(word, data):
         TranslatedWord.value == word).first()
     if not db_word:
         translates = []
-        for translate in data['translations']:
-            translates.append(TranslatedOption(**{
-                'id': translate['translate_id'],
-                'value': translate['translate_value'],
-                'votes': translate['translate_votes']
-            }))
-        word = TranslatedWord(**{
-            'id': data['word_id'],
-            'value': word,
-            'transcription': data['transcription'],
-            'sound_url': data['sound_url'],
-        })
-        word.translates = translates
-        session.add(word)
+        for translate in data['translations']:  # unknown word with default
+            if translate['translate_id'] != 0:  # empty translate id=0
+                translates.append(TranslatedOption(**{
+                    'id': translate['translate_id'],
+                    'value': translate['translate_value'],
+                    'votes': translate['translate_votes']
+                }))
+        if translates:
+            word = TranslatedWord(**{
+                'id': data['word_id'],
+                'value': word,
+                'transcription': data['transcription'],
+                'sound_url': data['sound_url'],
+            })
+            word.translates = translates
+            session.add(word)
 
 
 def get_translations(url, words):
