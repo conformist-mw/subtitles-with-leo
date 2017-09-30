@@ -34,32 +34,44 @@
 			.inner:hover > .remove {
 				display: block;
 			}
+			.panel-body a {
+				color: black;
+				font-size: 2em;
+				font-weight: bold;
+			}
+			.panel-body a:hover {
+				text-decoration: none;
+			}
 		</style>
 	</head>
 	<body>
 		<div class="panel panel-default" style="background: #faf9f9">
 			<div class="container">
 				<div class="panel-body">
-					<a href="https://lingualeo.com">Lingualeo</a>
-					<a class="pull-right" href="https://github.com/conformist-mw/subtitles-with-leo">Subtitles with Leo</a>
+					<a href="https://lingualeo.com"><i class="fa fa-paw" aria-hidden="true"></i> Lingualeo</a>
+					<a class="pull-right" href="https://github.com/conformist-mw/subtitles-with-leo"><i class="fa fa-github" aria-hidden="true"></i> Subtitles with Leo</a>
 				</div>
 			</div>
 		</div>
 		<div class="container">
 			<div class="row">
-				{% for item in data %}
+				{% for item in words.items %}
 				<div class="col-md-4">
-					<div  id="{{ item['word'] }}" class="col-md-12 inner text-center well">
-						<a data-word="{{ item['word'] }}" onclick="ignoreWord({{ item['word'] }}Ignore);" id="{{ item['word'] }}Ignore" class="remove" href="#/" title="ignore word"><i class="glyphicon glyphicon-remove"></i></a>
-						<p class="head"><a href="#/" onclick="playWord('{{ item['word'] }}Audio')"><i class="glyphicon glyphicon-volume-up"></i></a> {{ item['word'] }}</p>
-						<code>{{ item['transcription'] }}</code>
-						<audio id="{{ item['word'] }}Audio" src="{{ item['sound_url'] }}"></audio>
+					<div class="col-md-12 inner text-center well">
+						<a data-id="{{ item.id }}" data-word="{{ item.value }}" data-transcription="{{ item.transcription }}" onclick="ignoreWord(this);" class="remove" href="#/" title="ignore word">
+							<i class="glyphicon glyphicon-remove"></i>
+						</a>
+						<p class="head">
+							<a href="#/" onclick="playWord(this)"><i class="glyphicon glyphicon-volume-up"></i></a>
+						{{ item.value }}</p>
+						<code>{{ item.transcription }}</code>
+						<audio src="{{ item.sound_url }}"></audio>
 						<hr>
-						{% for translate in item['translations'] %}
+						{% for translate in item.translates|sort(attribute='votes', reverse=True) %}
 						<p class="col-md-9">
-							<a id="{{ item['word'] }}{{ translate['translate_id'] }}" data-word="{{ item['word'] }}" data-word_id="{{ item['word_id'] }}" data-translate_value="{{ translate['translate_value'] }}" data-translate_id="{{ translate['translate_id'] }}" onclick="addWord({{ item['word'] }}{{ translate['translate_id'] }});" href="#/">{{ translate['translate_value'] }}</a>
+							<a id="id{{ translate.id }}" data-word="{{ item.value }}" data-translate="{{ translate.value }}" data-translate_id="{{ translate.id }}" data-word_id="{{ item.id }}" data-transcription="{{ item.transcription }}" onclick="addWord(this);" href="#/">{{ translate.value }}</a>
 						</p>
-						<p class="col-md-3">{{ translate['translate_votes'] }}</p>
+						<p class="col-md-3">{{ translate.votes }}</p>
 						{% endfor %}
 					</div>
 				</div>
@@ -68,48 +80,73 @@
 				{% endif %}
 				{% endfor %}
 			</div>
+			<div class="col-md-12">
+				<div class="text-center">
+		      <ul class="pagination">
+		      {% if words.has_prev %}
+		        <li><a href="{{ url_for(request.endpoint, page=words.prev_num) }}"><span>«</span></a></li>
+		      {% else %}
+		        <li class="disabled"><span>«</span></li>
+		      {% endif %}
+		      {% for page in words.iter_pages() %}
+		        {% if page %}
+		          {% if page != words.page %}
+		            <li><a href="{{ url_for(request.endpoint, page=page) }}">{{ page }}</a></li>
+		          {% else %}
+		            <li class="active"><span>{{ page }}</span></li>
+		          {% endif %}
+		        {% else %}
+		          <li><span class="ellipsis">...</span></li>
+		        {% endif %}
+		      {% endfor %}
+		      {% if words.has_next %}
+		        <li><a href="{{ url_for(request.endpoint, page=words.next_num) }}"><span>»</span></a></li>
+		      {% else %}
+		        <li class="disabled"><span>»</span></li>
+		      {% endif %}
+		      </ul>
+		    </div>
+	    </div>
 		</div>
-		<div style="height: 60px;">
-		</div>
-		<nav class="navbar-default navbar-bottom">
+		<div class="navbar-inverse navbar-bottom">
 			<div class="container">
 				<div class="col-sm-12 text-center navbar-text">
 					conformist © <a href="https://github.com/conformist-mw">github</a>
 				</div>
 			</div>
-		</nav>
+		</div>
 	</body>
 	<script type="text/javascript">
-		function playWord(audioId){
-			var word = document.getElementById(audioId);
-			word.play();
-		}
-		function addWord(id){
-			var translate_value = $(id).data('translate_value');
-			var translate_id = $(id).data('translate_id');
-			var word_id = $(id).data('word_id');
-			var word = $(id).data('word');
+		function playWord(elem){
+			var audio = $(elem).parent().siblings()[2];
+			audio.play();
+		};
+		function addWord(elem){
+			var word = $(elem).data('word');
+			var word_id = $(elem).data('word_id');
+			var translate = $(elem).data('translate');
+			var translate_id = $(elem).data('translate_id');
+			var transcription = $(elem).data('transcription');
 			data = {
 				'word_id': word_id,
-				'speech_part_id': 0,
-				'groupId': 'dictionary',
-				'translate_id': translate_id,
-				'translate_value': translate_value,
-				'user_word_value': word
+				'translate_id': translate_id
 			};
 			$.post('http://localhost:5000/addWord', data)
 				.done(function(){
-					var str = '<p class="head">' + word + '</p><p>' + translate_value + '</p>';
-					$('#' + word).html(str);
+					var div = $(elem).parents('div.well');
+					var str = '<p class="head">' + word + '</p><code>' + transcription + '</code><hr><strong class="text-success" style="font-size: 2em;">' + translate + '</strong>';
+					div.html(str);
 				});
-		}
-		function ignoreWord(word_id){
-			var word = $(word_id).data('word');
-			console.log(word);
-			$.post('http://localhost:5000/ignoreWord', {'word': word})
+		};
+		function ignoreWord(elem){
+			var id = $(elem).data('id');
+			var word = $(elem).data('word');
+			var transcription = $(elem).data('transcription');
+			$.post('http://localhost:5000/ignoreWord', {'id': id})
 				.done(function(){
-					var str = '<p class="head">' + word + '</p><br><p>Ignored</p>';
-					$('#' + word).html(str);
+					var div = $(elem).parent('div.well');
+					var str = '<p class="head">' + word + '</p><code>' + transcription + '</code><hr><strong class="text-danger text-uppercase">Ignored</strong>';
+					div.html(str);
 				});
 		}
 	</script>
