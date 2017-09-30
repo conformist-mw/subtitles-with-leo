@@ -1,7 +1,6 @@
-import json
 from configparser import ConfigParser
-from flask import Flask, request, render_template
 from main import get_auth_session, get_credentials
+from flask import Flask, request, render_template, jsonify
 from models import db, TranslatedWord, StopWord, TranslatedOption
 
 config = ConfigParser()
@@ -22,8 +21,7 @@ s = get_auth_session(urls['login_url'], email, password)
 @app.route('/', methods=['GET'])
 @app.route('/<int:page>', methods=['GET'])
 def index(page=1):
-    words = TranslatedWord.query.paginate(
-        page, per_page, False)
+    words = TranslatedWord.query.paginate(page, per_page, False)
     return render_template('index.html', words=words)
 
 
@@ -42,11 +40,10 @@ def add_word():
         'from_syntrans_id': '',
         'to_systrans_id': ''
     }
-    s.post('https://lingualeo.com/ru/userdict3/addWord', data=payload)
+    r = s.post('https://lingualeo.com/ru/userdict3/addWord', data=payload)
     db.session.delete(word)
     db.session.commit()
-    return json.dumps(
-        {'success': True}), 200, {'ContentType': 'application/json'}
+    return jsonify(r.json()['userdict3']['user_translates'][0])
 
 
 @app.route('/ignoreWord', methods=['POST'])
@@ -57,9 +54,8 @@ def ignore_word():
     db.session.add(stop_word)
     db.session.delete(word)
     db.session.commit()
-    return json.dumps(
-        {'success': True}), 200, {'ContentType': 'application/json'}
+    return jsonify({'success': True})
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', debug=True)
+    app.run(host='0.0.0.0')
