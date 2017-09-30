@@ -42,6 +42,9 @@
 			.panel-body a:hover {
 				text-decoration: none;
 			}
+			img.img-responsive {
+				margin: 0 auto;
+			}
 		</style>
 	</head>
 	<body>
@@ -132,9 +135,10 @@
 				'translate_id': translate_id
 			};
 			$.post('http://localhost:5000/addWord', data)
-				.done(function(){
+				.done(function(response){
+					picture = 'https:' + response['picture_url'];
 					var div = $(elem).parents('div.well');
-					var str = '<p class="head">' + word + '</p><code>' + transcription + '</code><hr><strong class="text-success" style="font-size: 2em;">' + translate + '</strong>';
+					var str = '<p class="head">' + word + '</p><code>' + transcription + '</code><hr><strong class="text-success" style="font-size: 2em;">' + translate + '</strong><br><img class="img-responsive" src="' + picture + '">';
 					div.html(str);
 				});
 		};
