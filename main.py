@@ -1,25 +1,25 @@
 import re
 import sys
-import json
 import requests
+from models import *
+from getpass import getpass
+from datetime import datetime
+from sqlalchemy import create_engine
 from configparser import ConfigParser
+from sqlalchemy.orm import sessionmaker
 from jinja2 import Environment, FileSystemLoader
 
 
-def load_from_file(filename):
-    with open(filename, 'r') as f:
-        return json.load(f)
-
-
-def save_to_file(filename, data):
-    with open(filename, 'w') as f:
-        f.write(json.dumps(data, ensure_ascii=False))
+def get_sql_session(db_uri):
+    engine = create_engine(db_uri)
+    Session = sessionmaker(engine)
+    return Session()
 
 
 def get_credentials(config):
     if not config['CREDENTIALS'].getboolean('from_config'):
         email = input('Email: ')
-        password = input('Password: ')
+        password = getpass()
     else:
         email = config['CREDENTIALS']['email']
         password = config['CREDENTIALS']['password']
@@ -42,20 +42,37 @@ def get_auth_session(login_url, email, password):
         return session
 
 
+def add_dict_word(word):
+    db_word = Word(**{
+        'id': word['word_id'],
+        'value': word['word_value'],
+        'transcription': word['transcription'],
+        'created': datetime.fromtimestamp(word['created_at']),
+        'last_update': datetime.fromtimestamp(word['last_updated_at']),
+        'picture_url': word['picture_url'],
+        'sound_url': word['sound_url']
+    })
+    translates = []
+    for translate in word['user_translates']:
+        translates.append(Translate(**{
+            'id': translate['translate_id'],
+            'value': translate['translate_value'],
+            'votes': translate['translate_votes']
+        }))
+    db_word.translates = translates
+    session.add(db_word)
+
+
 def extract_words(data):
-    dictionary = {}
     words = [word for item in data for word in item if word]
+    word_count = 0
     for word in words:
-        if word['word_value'] not in saved_dict:
-            dictionary[word['word_value'].lower()] = {
-                'word_id': word['word_id'],
-                'transcription': word['transcription'],
-                'translate': [w['translate_value'] for w
-                              in word['user_translates']],
-                'picture_url': word['picture_url'],
-                'sound_url': word['sound_url']
-            }
-    return dictionary
+        db_word = session.query(Word).filter(
+            Word.value == word['word_value']).first()
+        if not db_word:
+            word_count += 1
+            add_dict_word(word)
+    return word_count
 
 
 def download_dictionary(session, dict_url):
@@ -66,53 +83,52 @@ def download_dictionary(session, dict_url):
         'page': 1,
         'groupId': 'dictionary'
     }
-    dictionary = {}
     show_more = True
     attempts = 0
     while show_more and attempts <= 3:
         r = session.get(dict_url, params=params)
         if r.ok:
             data = r.json()
-            words = extract_words([i['words'] for i in data['userdict3']])
-            if len(words) == 0:  # if page is empty the words are saved.
+            word_count = extract_words([i['words'] for i in data['userdict3']])
+            if word_count == 0:  # if count is 0 the words are saved.
                 attempts += 1  # download three more pages for sure.
-            dictionary.update(words)
             show_more = data['show_more']
             params['page'] += 1
         else:
             attempts += 1
-    return dictionary
 
 
-def parse_subtitles(text, stop_words):
-    words = re.findall(r'\b[a-zA-Z\']{2,}\b', text)
+def parse_subtitles(text):
+    words = re.findall(r'\b[a-zA-Z]{2,}\b', text)
     words = set([w.lower() for w in words])
-    return [w for w in words if w not in stop_words]
+    return list(words)
 
 
-def translate_word(word, data):
-    translations = []
-    for translate in data['translations']:
-        t = {
-            'translate_id': translate['translate_id'],
-            'translate_value': translate['translate_value'],
-            'translate_votes': translate['translate_votes']
-        }
-        translations.append(t)
-    return {
-        'word': word,
-        'word_id': data['word_id'],
-        'transcription': data['transcription'],
-        'sound_url': data['sound_url'],
-        'translations': translations
-    }
+def add_translated_word(word, data):
+    db_word = session.query(TranslatedWord).filter(
+        TranslatedWord.value == word).first()
+    if not db_word:
+        translates = []
+        for translate in data['translations']:
+            translates.append(TranslatedOption(**{
+                'id': translate['translate_id'],
+                'value': translate['translate_value'],
+                'votes': translate['translate_votes']
+            }))
+        word = TranslatedWord(**{
+            'id': data['word_id'],
+            'value': word,
+            'transcription': data['transcription'],
+            'sound_url': data['sound_url'],
+        })
+        word.translates = translates
+        session.add(word)
 
 
 def get_translations(url, words):
-    translated = []
     for word in words:
         r = s.get(url.format(word))
-        if r.ok:
+        if not r.json()['error_msg']:
             word_data = r.json()['userdict3']
             if len(word_data['lemmas']) > 0:
                 lemma = word_data['lemmas'][0]['lemma_value'].lower()
@@ -121,13 +137,16 @@ def get_translations(url, words):
             if word != lemma:
                 r = s.get(url.format(lemma))
                 word_data = r.json()['userdict3']
-            is_user = word_data['is_user']
+            db_word = session.query(Word).filter(
+                Word.value == lemma).first()
+            stop_word = session.query(StopWord).get(lemma)
+            word_in_dict = bool(db_word)
+            word_in_stop_words = bool(stop_word)
             no_trans = not bool(len(word_data['translations']))
-            has_error = bool(r.json()['error_msg'])
-            word_in_saved_dict = lemma in saved_dict
-            if not any([is_user, no_trans, has_error, word_in_saved_dict]):
-                translated.append(translate_word(lemma, word_data))
-    return translated
+            is_user = word_data['is_user']
+            if not any([is_user, no_trans,
+                        word_in_dict, word_in_stop_words]):
+                add_translated_word(lemma, word_data)
 
 
 def generate_pages(translated_words):
@@ -147,17 +166,14 @@ if __name__ == '__main__':
         sys.exit('Credentials are not right, exiting')
     if not config['CREDENTIALS'].getboolean('from_config'):
         save_credentials(config, email, password)
-    saved_dict = load_from_file('dictionary.json')
+    session = get_sql_session(urls['db_uri'])
     dictionary = download_dictionary(s, urls['dict_url'])
-    saved_dict.update(dictionary)
-    save_to_file('dictionary.json', saved_dict)
+    session.commit()
     if len(sys.argv) > 1:
         with open(sys.argv[1]) as f:
             data = f.read()
-        with open('stopwords.txt') as f:
-            stop_words = [w.strip() for w in f.readlines()]
-        movie_words = parse_subtitles(data, stop_words)
-        new_words = set([w for w in movie_words if w not in saved_dict])
-        translated_words = get_translations(urls['translate_url'], new_words)
-        generate_pages(translated_words)
-        save_to_file('translated_words.json', translated_words)
+        dict_words = [w.value for w in session.query(Word).all()]
+        movie_words = parse_subtitles(data)
+        new_words = set([w for w in movie_words if w not in dict_words])
+        get_translations(urls['translate_url'], new_words)
+        session.commit()
