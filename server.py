@@ -1,7 +1,9 @@
+import csv
+from io import StringIO
 from configparser import ConfigParser
 from main import get_auth_session, get_credentials
-from flask import Flask, request, render_template, jsonify
 from models import db, TranslatedWord, StopWord, TranslatedOption
+from flask import Flask, request, render_template, jsonify, make_response
 
 config = ConfigParser()
 config.read('config.ini')
@@ -55,6 +57,21 @@ def ignore_word():
     db.session.delete(word)
     db.session.commit()
     return jsonify({'success': True})
+
+
+@app.route('/saveCSV', methods=['GET'])
+def save_csv():
+    words = TranslatedWord.query.all()
+    si = StringIO()
+    cw = csv.writer(si, quoting=csv.QUOTE_ALL)
+    for word in words:
+        cw.writerow([word.value,
+                     sorted(word.translates, key=lambda x: x.votes)[-1].value,
+                     word.transcription, word.sound_url])
+    out_csv = make_response(si.getvalue())
+    out_csv.headers['Content-Disposition'] = 'attachment; filename=export.csv'
+    out_csv.headers['Content-type'] = 'text/csv'
+    return out_csv
 
 
 if __name__ == "__main__":
