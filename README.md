@@ -23,6 +23,16 @@ python3 main.py
 and as it is the first run, script will ask you a login data (email, password). If you input it correctly script saved it in `config.ini` in `CREDENTIALS` section and never asked it again.
 If you do not specify the text file then script just save your whole dictionary from site to `dictionary.db` otherwise script parsed out the file and save new words in `translated_words` table of db.
 
+### Can I import my dictionary to Anki?
+
+You have two choices:
+
+- save whole dictionary to csv (includes audio and pictures):
+```bash
+python3 main.py --savecsv example.csv
+```
+- save only new words (translated) by clicking a link on site panel.
+
 ### I specified text file, how to add new words?
 
 Very simple. Now you run `python3 server.py` and open [127.0.0.1:5000](http://127.0.0.1:5000) in browser. Here you can choose the preffered translate for every word or ignore it. Ignored words writes to `stopword` table and never show up in  `translated_words` again.
