@@ -1,12 +1,21 @@
 import re
 import sys
+import csv
 import requests
+import argparse
 from models import *
 from getpass import getpass
 from datetime import datetime
 from sqlalchemy import create_engine
 from configparser import ConfigParser
 from sqlalchemy.orm import sessionmaker
+
+
+def create_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('filename', nargs='?', help='path to text file')
+    parser.add_argument('--savecsv', help='save all dict to csv file')
+    return parser
 
 
 def get_sql_session(db_uri):
@@ -150,7 +159,19 @@ def get_translations(url, words):
                 add_translated_word(lemma, word_data)
 
 
+def save_csv(session, filepath):
+    words = session.query(Word).all()
+    with open(filepath, 'w') as csvfile:
+        cw = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
+        for word in words:
+            cw.writerow([word.value,
+                         ';'.join([w.value for w in word.translates]),
+                         word.transcription, word.sound_url, word.picture_url])
+
+
 if __name__ == '__main__':
+    parser = create_parser()
+    args = parser.parse_args()
     config = ConfigParser()
     config.read('config.ini')
     urls = dict(config.defaults())
@@ -163,11 +184,13 @@ if __name__ == '__main__':
     session = get_sql_session(urls['db_uri'])
     dictionary = download_dictionary(s, urls['dict_url'])
     session.commit()
-    if len(sys.argv) > 1:
-        with open(sys.argv[1]) as f:
+    if args.filename:
+        with open(args.filename) as f:
             data = f.read()
         dict_words = [w.value for w in session.query(Word).all()]
         movie_words = parse_subtitles(data)
         new_words = set([w for w in movie_words if w not in dict_words])
         get_translations(urls['translate_url'], new_words)
         session.commit()
+    if args.savecsv:
+        save_csv(session, args.savecsv)
