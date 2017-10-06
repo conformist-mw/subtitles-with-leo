@@ -141,7 +141,7 @@
 				'word_id': word_id,
 				'translate_id': translate_id
 			};
-			$.post('http://localhost:5000/addWord', data)
+			$.post('/addWord', data)
 				.done(function(response){
 					var picture = response['picture_url'];
 					if (! picture){
@@ -156,7 +156,7 @@
 			var id = $(elem).data('id');
 			var word = $(elem).data('word');
 			var transcription = $(elem).data('transcription');
-			$.post('http://localhost:5000/ignoreWord', {'id': id})
+			$.post('/ignoreWord', {'id': id})
 				.done(function(){
 					var div = $(elem).parent('div.well');
 					var str = '<p class="head">' + word + '</p><code>' + transcription + '</code><hr><strong class="text-danger text-uppercase">Ignored</strong>';
